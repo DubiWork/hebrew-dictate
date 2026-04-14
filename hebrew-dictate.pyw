@@ -46,8 +46,9 @@ SILENCE_THRESHOLD = 0.01
 SILENCE_DURATION = 0.8
 MIN_AUDIO_DURATION = 0.5
 
-# Default model — change this after running the benchmark
+# Default model — benchmarked 2025-04-14, turbo@2025.05.13 is fastest+accurate
 DEFAULT_MODEL = "ivrit-ai/whisper-large-v3-turbo-ct2"
+DEFAULT_REVISION = "2025.05.13"
 
 # Global hotkey — double-tap Right Ctrl to toggle listening on/off
 DOUBLE_TAP_KEY = "right ctrl"
@@ -59,6 +60,7 @@ class AppState:
         self.listening = False
         self.model = None
         self.model_id = DEFAULT_MODEL
+        self.model_revision = DEFAULT_REVISION
         self.tray_icon = None
         self.audio_queue = queue.Queue()
         self.transcribe_queue = queue.Queue()  # chunks waiting to be transcribed
@@ -300,10 +302,11 @@ def load_model():
     state.loading_model = True
     update_icon(ICON_LOADING)
     update_menu()
-    log.info("Loading model: %s", state.model_id)
+    log.info("Loading model: %s (revision=%s)", state.model_id, state.model_revision)
 
     try:
-        state.model = WhisperModel(state.model_id, device="cuda", compute_type="int8")
+        state.model = WhisperModel(state.model_id, device="cuda", compute_type="int8",
+                                   revision=state.model_revision)
         log.info("Model loaded successfully")
     except Exception as e:
         log.error("Failed to load model: %s", e, exc_info=True)
