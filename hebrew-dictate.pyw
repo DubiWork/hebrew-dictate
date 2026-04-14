@@ -3,7 +3,7 @@ Hebrew Dictation Tray App
 Runs in the system tray. Speak Hebrew, text gets typed into any focused app.
 No console window needed — run with pythonw.exe or double-click the .pyw file.
 
-Hotkey: Ctrl+Alt+H  — toggle listening on/off (like Win+H but for Hebrew)
+Hotkey: Double-tap Right Ctrl — toggle listening on/off
 Right-click tray icon for menu: Start/Stop listening, Quit.
 """
 
@@ -15,8 +15,13 @@ import queue
 import threading
 import logging
 import ctypes
+from pathlib import Path
 import numpy as np
 import sounddevice as sd
+
+# Add NVIDIA CUDA DLLs to search path (pip-installed nvidia packages)
+for nvidia_dir in Path(sys.prefix, "Lib", "site-packages", "nvidia").glob("*/bin"):
+    os.environ["PATH"] = str(nvidia_dir) + os.pathsep + os.environ.get("PATH", "")
 import pyperclip
 import pyautogui
 from PIL import Image, ImageDraw, ImageFont
@@ -44,8 +49,9 @@ MIN_AUDIO_DURATION = 0.5
 # Default model — change this after running the benchmark
 DEFAULT_MODEL = "ivrit-ai/whisper-large-v3-turbo-ct2"
 
-# Global hotkey — press to toggle listening on/off
-HOTKEY = "ctrl+alt+h"
+# Global hotkey — double-tap Right Ctrl to toggle listening on/off
+DOUBLE_TAP_KEY = "right ctrl"
+DOUBLE_TAP_WINDOW = 0.4  # seconds between taps
 
 # ── State ───────────────────────────────────────────────────────────────────
 class AppState:
@@ -67,6 +73,7 @@ class AppState:
         self.chunks_pending = 0
         self.chunks_lock = threading.Lock()
         self.buffer_lock = threading.Lock()
+        self.last_tap_time = 0
         self.enter_hook = None
 
 state = AppState()
@@ -172,6 +179,8 @@ def transcribe_worker():
                 language="he",
                 beam_size=1,
                 vad_filter=False,
+                word_timestamps=True,
+                initial_prompt="שלום, זוהי הקלטה בעברית. אני מדבר בעברית.",
             )
 
             text_parts = [seg.text.strip() for seg in segments]
@@ -294,7 +303,7 @@ def load_model():
     log.info("Loading model: %s", state.model_id)
 
     try:
-        state.model = WhisperModel(state.model_id, device="cpu", compute_type="int8")
+        state.model = WhisperModel(state.model_id, device="cuda", compute_type="int8")
         log.info("Model loaded successfully")
     except Exception as e:
         log.error("Failed to load model: %s", e, exc_info=True)
@@ -315,7 +324,7 @@ def update_menu():
         state.tray_icon.menu = build_menu()
 
 def start_listening():
-    """Start listening — called from Ctrl+Alt+H."""
+    """Start listening — called from double-tap Right Ctrl."""
     if state.loading_model or state.listening:
         return
 
@@ -332,7 +341,7 @@ def start_listening():
             if state.model is not None:
                 state.listening = True
                 if state.enter_hook is None:
-                    state.enter_hook = keyboard.on_press_key("enter", lambda e: on_hotkey_stop(), suppress=False)
+                    state.enter_hook = keyboard.on_press_key("enter", lambda e: stop_listening(), suppress=False)
                 update_icon(ICON_LISTENING)
                 log.info("Listening started (after model load)")
             else:
@@ -343,24 +352,34 @@ def start_listening():
         # Model already loaded — enable immediately
         state.listening = True
         if state.enter_hook is None:
-            state.enter_hook = keyboard.on_press_key("enter", lambda e: on_hotkey_stop(), suppress=False)
+            state.enter_hook = keyboard.on_press_key("enter", lambda e: stop_listening(), suppress=False)
         update_icon(ICON_LISTENING)
         log.info("Listening started")
     update_menu()
 
 
 def stop_listening():
-    """Stop listening and transcribe — called from Enter."""
+    """Stop listening and transcribe — called from double-tap Right Ctrl."""
     if not state.listening:
         return
 
     state.listening = False
     log.info("Listening stopped")
+    state.silence_counter = 0
+    state.is_speaking = False
+
+    # Unhook Enter key
     if state.enter_hook is not None:
         keyboard.unhook(state.enter_hook)
         state.enter_hook = None
-    state.silence_counter = 0
-    state.is_speaking = False
+
+    # Drain any remaining audio from the queue into the buffer
+    while not state.audio_queue.empty():
+        try:
+            data = state.audio_queue.get_nowait()
+            state.recording_buffer.append(data)
+        except queue.Empty:
+            break
 
     # Transcribe whatever we have buffered
     with state.buffer_lock:
@@ -389,15 +408,14 @@ def on_toggle_listening(icon, item):
     toggle_listening()
 
 
-def on_hotkey_start():
-    """Called when Ctrl+Alt+H is pressed — start listening."""
-    start_listening()
-
-
-def on_hotkey_stop():
-    """Called when Enter is pressed — stop and transcribe only if listening."""
-    if state.listening:
-        stop_listening()
+def on_double_tap(event):
+    """Called on Right Ctrl key-up — detect double-tap to toggle listening."""
+    now = time.time()
+    if now - state.last_tap_time < DOUBLE_TAP_WINDOW:
+        state.last_tap_time = 0  # reset to avoid triple-tap re-trigger
+        toggle_listening()
+    else:
+        state.last_tap_time = now
 
 
 def on_quit(icon, item):
@@ -421,7 +439,7 @@ def build_menu():
     return pystray.Menu(
         pystray.MenuItem(toggle_label, on_toggle_listening, default=True),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem(f"Start: {HOTKEY.upper()} | Stop: ENTER", None, enabled=False),
+        pystray.MenuItem("Toggle: double-tap Right Ctrl", None, enabled=False),
         pystray.MenuItem(status, None, enabled=False),
         pystray.MenuItem(count, None, enabled=False),
         pystray.Menu.SEPARATOR,
@@ -431,28 +449,34 @@ def build_menu():
 
 # ── Main ───────────────────────────────────────────────────────────────────
 def main():
+    # Single-instance lock via Windows mutex
+    ctypes.windll.kernel32.CreateMutexW.restype = ctypes.c_void_p
+    mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "HebrewDictateMutex")
+    if ctypes.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        log.info("Another instance is already running — exiting")
+        return
+
     log.info("Hebrew Dictation starting up")
     pyautogui.FAILSAFE = False
     pyautogui.PAUSE = 0.0
 
-    # Register global hotkey
-    keyboard.add_hotkey(HOTKEY, on_hotkey_start, suppress=True)
+    # Register double-tap Right Ctrl to toggle listening
+    keyboard.on_release_key(DOUBLE_TAP_KEY, on_double_tap, suppress=False)
 
     state.tray_icon = pystray.Icon(
         name="hebrew-dictate",
-        icon=ICON_IDLE,
-        title="Hebrew Dictation (Ctrl+Alt+H)",
+        icon=ICON_LOADING,
+        title="Hebrew Dictation — loading model...",
         menu=build_menu(),
     )
 
-    # Auto-load model on startup
+    # Start background threads before icon.run() — they'll update the icon once it's visible
     def auto_load():
         load_model()
         if state.model is not None and not state.listening:
             update_icon(ICON_IDLE)
+            state.tray_icon.title = "Hebrew Dictation (double-tap Right Ctrl)"
     threading.Thread(target=auto_load, daemon=True).start()
-
-    # Start single transcription worker thread
     threading.Thread(target=transcribe_worker, daemon=True).start()
 
     state.tray_icon.run()

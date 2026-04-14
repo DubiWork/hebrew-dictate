@@ -10,21 +10,30 @@ Usage:
 """
 
 import argparse
+import os
 import sys
 import time
 import numpy as np
 import sounddevice as sd
+
+# Fix Hebrew output on Windows console
+sys.stdout.reconfigure(encoding='utf-8')
 from pathlib import Path
+
+# Add NVIDIA CUDA DLLs to search path (pip-installed nvidia packages)
+for nvidia_dir in Path(sys.prefix, "Lib", "site-packages", "nvidia").glob("*/bin"):
+    os.environ["PATH"] = str(nvidia_dir) + os.pathsep + os.environ.get("PATH", "")
 
 SAMPLE_RATE = 16000
 
 # Models to benchmark — order: fastest/smallest first
 MODELS = [
-    {"id": "base",                                    "label": "OpenAI base",           "type": "generic"},
-    {"id": "small",                                   "label": "OpenAI small",          "type": "generic"},
-    {"id": "medium",                                  "label": "OpenAI medium",         "type": "generic"},
-    {"id": "ivrit-ai/whisper-large-v3-turbo-ct2",     "label": "ivrit-ai turbo (HE)",   "type": "hebrew"},
-    {"id": "ivrit-ai/whisper-large-v3-ct2",           "label": "ivrit-ai large-v3 (HE)","type": "hebrew"},
+    {"id": "ivrit-ai/whisper-large-v3-turbo-ct2",     "label": "turbo CPU",         "type": "hebrew", "device": "cpu",  "compute": "int8"},
+    {"id": "ivrit-ai/whisper-large-v3-turbo-ct2",     "label": "turbo GPU fp16",    "type": "hebrew", "device": "cuda", "compute": "float16"},
+    {"id": "ivrit-ai/whisper-large-v3-turbo-ct2",     "label": "turbo GPU int8",    "type": "hebrew", "device": "cuda", "compute": "int8"},
+    {"id": "ivrit-ai/whisper-large-v3-ct2",           "label": "large-v3 CPU",      "type": "hebrew", "device": "cpu",  "compute": "int8"},
+    {"id": "ivrit-ai/whisper-large-v3-ct2",           "label": "large-v3 GPU fp16", "type": "hebrew", "device": "cuda", "compute": "float16"},
+    {"id": "ivrit-ai/whisper-large-v3-ct2",           "label": "large-v3 GPU int8", "type": "hebrew", "device": "cuda", "compute": "int8"},
 ]
 
 parser = argparse.ArgumentParser(description="Benchmark Whisper models for Hebrew")
@@ -96,7 +105,7 @@ for i, m in enumerate(selected):
     load_start = time.time()
     try:
         from faster_whisper import WhisperModel
-        model = WhisperModel(model_id, device="cpu", compute_type="int8")
+        model = WhisperModel(model_id, device=m.get("device", "cpu"), compute_type=m.get("compute", "int8"))
         load_time = time.time() - load_start
         print(f"done ({load_time:.1f}s)")
     except Exception as e:

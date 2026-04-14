@@ -24,6 +24,11 @@ import time
 import queue
 import numpy as np
 import sounddevice as sd
+from pathlib import Path
+
+# Add NVIDIA CUDA DLLs to search path (pip-installed nvidia packages)
+for nvidia_dir in Path(sys.prefix, "Lib", "site-packages", "nvidia").glob("*/bin"):
+    os.environ["PATH"] = str(nvidia_dir) + os.pathsep + os.environ.get("PATH", "")
 import pyperclip
 import pyautogui
 import ctypes
@@ -58,7 +63,7 @@ pyautogui.PAUSE = 0.0
 
 # ── Load model ──────────────────────────────────────────────────────────────
 print(f"Loading Whisper model '{args.model}'... (first run downloads it)")
-model = WhisperModel(args.model, device="cpu", compute_type="int8")
+model = WhisperModel(args.model, device="cuda", compute_type="int8")
 print("Model loaded!\n")
 print("=" * 55)
 if args.print_only:
