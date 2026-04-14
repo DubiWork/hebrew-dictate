@@ -139,9 +139,9 @@ def type_text(text):
 
     try:
         pyperclip.copy(text)
-        time.sleep(0.02)
-        pyautogui.hotkey("ctrl", "v")
         time.sleep(0.05)
+        keyboard.send("ctrl+v")
+        time.sleep(0.15)
     finally:
         try:
             pyperclip.copy(old_clipboard)
@@ -188,6 +188,8 @@ def transcribe_worker():
             text_parts = [seg.text.strip() for seg in segments]
             text = " ".join(text_parts).strip()
 
+            log.info("Transcribed (%0.1fs audio): %s", duration, text[:100])
+
             # Add space after punctuation where missing (e.g. "שלום.מה" → "שלום. מה")
             text = re.sub(r'([.!?,;:])([^\s])', r'\1 \2', text)
 
@@ -200,11 +202,14 @@ def transcribe_worker():
             filtered = text.strip(" .…,!?-_\"'")
             check_text = filtered[:500]  # cap regex input to prevent ReDoS
             if not check_text or len(check_text) <= 1:
+                log.info("Filtered (too short): '%s'", text[:50])
                 pass  # skip entirely
             elif re.search(r'(.{3,}?)\1{2,}', check_text):
+                log.info("Filtered (repetition): '%s'", text[:50])
                 pass  # repetition loop hallucination
             else:
                 state.transcription_count += 1
+                log.info("Typing: %s", text[:100])
                 type_text(text + " ")
 
             # Update icon
