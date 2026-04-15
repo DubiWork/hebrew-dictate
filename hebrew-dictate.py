@@ -63,8 +63,13 @@ pyautogui.PAUSE = 0.0
 
 # ── Load model ──────────────────────────────────────────────────────────────
 print(f"Loading Whisper model '{args.model}'... (first run downloads it)")
-model = WhisperModel(args.model, device="cuda", compute_type="int8")
-print("Model loaded!\n")
+try:
+    model = WhisperModel(args.model, device="cuda", compute_type="int8")
+    print("Model loaded! (CUDA GPU)\n")
+except Exception:
+    print("  CUDA not available, falling back to CPU (slower)...")
+    model = WhisperModel(args.model, device="cpu", compute_type="int8")
+    print("Model loaded! (CPU)\n")
 print("=" * 55)
 if args.print_only:
     print("  MODE: Print only (not typing into apps)")

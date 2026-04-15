@@ -313,10 +313,16 @@ def load_model():
     try:
         state.model = WhisperModel(state.model_id, device="cuda", compute_type="int8",
                                    revision=state.model_revision)
-        log.info("Model loaded successfully")
+        log.info("Model loaded successfully (CUDA GPU)")
     except Exception as e:
-        log.error("Failed to load model: %s", e, exc_info=True)
-        state.model = None
+        log.warning("CUDA failed (%s), falling back to CPU", e)
+        try:
+            state.model = WhisperModel(state.model_id, device="cpu", compute_type="int8",
+                                       revision=state.model_revision)
+            log.info("Model loaded successfully (CPU — slower)")
+        except Exception as e2:
+            log.error("Failed to load model: %s", e2, exc_info=True)
+            state.model = None
         update_icon(ICON_ERROR)
 
     state.loading_model = False

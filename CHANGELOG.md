@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.0] - 2026-04-15
+
+### Added
+- Lightweight hotkey launcher (`hebrew-dictate-hotkey.pyw`) for Windows Startup — ~5MB RAM always-on listener
+- Auto-start setup instructions in README
+- Auto-detect GPU/CPU — falls back to CPU if CUDA is not available (no crash)
+- Tray icon watchdog — re-applies icon every 30s to prevent Windows from hiding it
+- Transcription debug logging (transcribed text, typing, filtering)
+- Troubleshooting section in README
+
+### Changed
+- Paste method switched from `pyautogui` to `keyboard.send` (fixes terminals)
+- README rewritten with clear Quick Start, auto-start setup, and troubleshooting
+- Post-paste delay increased for reliable clipboard restore
+
+### Fixed
+- Text not pasting in terminals (`keyboard.send("ctrl+v")` works at OS level)
+- Tray icon disappearing after long idle or sleep/wake
+
 ## [0.2.0] - 2026-04-14
 
 ### Added
