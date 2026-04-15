@@ -62,6 +62,7 @@ class AppState:
         self.model_id = DEFAULT_MODEL
         self.model_revision = DEFAULT_REVISION
         self.tray_icon = None
+        self.current_icon = None
         self.audio_queue = queue.Queue()
         self.transcribe_queue = queue.Queue()  # chunks waiting to be transcribed
         self.recording_buffer = []
@@ -326,6 +327,7 @@ def load_model():
 def update_icon(icon_img):
     if state.tray_icon:
         state.tray_icon.icon = icon_img
+        state.current_icon = icon_img
 
 def update_menu():
     if state.tray_icon:
@@ -486,6 +488,17 @@ def main():
             state.tray_icon.title = "Hebrew Dictation (double-tap Right Ctrl)"
     threading.Thread(target=auto_load, daemon=True).start()
     threading.Thread(target=transcribe_worker, daemon=True).start()
+
+    # Watchdog: re-apply icon every 30s to prevent Windows from hiding it
+    def icon_watchdog():
+        while True:
+            time.sleep(30)
+            if state.tray_icon and state.current_icon:
+                try:
+                    state.tray_icon.icon = state.current_icon
+                except Exception:
+                    pass
+    threading.Thread(target=icon_watchdog, daemon=True).start()
 
     state.tray_icon.run()
 
