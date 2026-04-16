@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1] - 2026-04-16
+
+### Added
+- Triple-tap Right Ctrl to force-restart the app from a broken state (kills and relaunches)
+- Hotkey launcher now detects double-tap (launch) vs triple-tap (force-restart)
+
 ## [0.3.0] - 2026-04-15
 
 ### Added
