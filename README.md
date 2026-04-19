@@ -33,7 +33,7 @@ That's it. The text is pasted wherever your cursor is — VS Code, browser, Word
 
 If the app gets stuck (no tray icon, not responding):
 
-- **Shift+Right Ctrl** — force-kills and restarts the app
+- **Right Shift + Right Ctrl** — force-kills and restarts the app
 
 ### Tray Icon Colors
 

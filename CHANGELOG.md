@@ -3,8 +3,8 @@
 ## [0.3.1] - 2026-04-16
 
 ### Added
-- Shift+Right Ctrl to force-restart the app from a broken state (kills and relaunches)
-- Hotkey launcher now detects double-tap (launch) vs Shift+Right Ctrl (force-restart)
+- Right Shift + Right Ctrl to force-restart the app from a broken state (kills and relaunches)
+- Only right-side modifier keys trigger force-restart (left Ctrl+Shift combos unaffected)
 
 ## [0.3.0] - 2026-04-15
 

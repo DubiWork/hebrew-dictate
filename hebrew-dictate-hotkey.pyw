@@ -4,7 +4,7 @@ Add to Windows Startup folder to enable double-tap Right Ctrl app launch.
 
 - Consumes ~5MB RAM (no model loaded)
 - On double-tap Right Ctrl: launches hebrew-dictate.pyw if not already running
-- On Shift+Right Ctrl: force-kills and restarts the app (recovery from broken state)
+- On Right Shift+Right Ctrl: force-kills and restarts the app (recovery from broken state)
 - If already running (double-tap): does nothing (the app handles the hotkey itself)
 
 Setup:
@@ -24,7 +24,7 @@ import keyboard
 # ── Config ──────────────────────────────────────────────────────────────────
 DOUBLE_TAP_KEY = "right ctrl"
 DOUBLE_TAP_WINDOW = 0.4  # seconds between taps
-FORCE_RESTART_HOTKEY = "shift+right ctrl"
+# Force-restart: Right Shift + Right Ctrl (only right-side keys, won't fire on left Ctrl+Shift)
 
 # Path to the main app
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -86,8 +86,18 @@ def launch_app():
 
 
 def on_double_tap(event):
-    """Called on Right Ctrl key-up — detect double-tap to launch app."""
+    """Called on Right Ctrl key-up — detect double-tap or Right Shift+Right Ctrl."""
     global last_tap_time
+
+    # Right Shift held = force-restart (only right shift, not left)
+    if keyboard.is_pressed("right shift"):
+        kill_app()
+        time.sleep(0.5)  # wait for mutex to release
+        launch_app()
+        last_tap_time = 0
+        return
+
+    # Otherwise: double-tap detection to launch app
     now = time.time()
     if now - last_tap_time < DOUBLE_TAP_WINDOW:
         last_tap_time = 0
@@ -95,13 +105,6 @@ def on_double_tap(event):
             launch_app()
     else:
         last_tap_time = now
-
-
-def on_force_restart():
-    """Shift+Right Ctrl — force-kill and relaunch the app."""
-    kill_app()
-    time.sleep(0.5)  # wait for mutex to release
-    launch_app()
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
@@ -113,7 +116,6 @@ def main():
         return
 
     keyboard.on_release_key(DOUBLE_TAP_KEY, on_double_tap, suppress=False)
-    keyboard.add_hotkey(FORCE_RESTART_HOTKEY, on_force_restart, suppress=False)
     keyboard.wait()  # blocks forever
 
 
