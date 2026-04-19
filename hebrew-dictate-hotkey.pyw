@@ -4,7 +4,7 @@ Add to Windows Startup folder to enable double-tap Right Ctrl app launch.
 
 - Consumes ~5MB RAM (no model loaded)
 - On double-tap Right Ctrl: launches hebrew-dictate.pyw if not already running
-- On triple-tap Right Ctrl: force-kills and restarts the app (recovery from broken state)
+- On Shift+Right Ctrl: force-kills and restarts the app (recovery from broken state)
 - If already running (double-tap): does nothing (the app handles the hotkey itself)
 
 Setup:
@@ -24,6 +24,7 @@ import keyboard
 # ── Config ──────────────────────────────────────────────────────────────────
 DOUBLE_TAP_KEY = "right ctrl"
 DOUBLE_TAP_WINDOW = 0.4  # seconds between taps
+FORCE_RESTART_HOTKEY = "shift+right ctrl"
 
 # Path to the main app
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -36,7 +37,7 @@ if not os.path.exists(PYTHONW):
 MUTEX_NAME = "HebrewDictateMutex"
 
 # ── State ───────────────────────────────────────────────────────────────────
-tap_times = []  # timestamps of recent taps
+last_tap_time = 0
 
 
 def is_app_running():
@@ -84,26 +85,23 @@ def launch_app():
         pass
 
 
-def on_tap(event):
-    """Called on Right Ctrl key-up — detect double/triple-tap."""
-    global tap_times
+def on_double_tap(event):
+    """Called on Right Ctrl key-up — detect double-tap to launch app."""
+    global last_tap_time
     now = time.time()
-
-    # Keep only taps within the window
-    tap_times = [t for t in tap_times if now - t < DOUBLE_TAP_WINDOW]
-    tap_times.append(now)
-
-    if len(tap_times) >= 3:
-        # Triple-tap: force-restart
-        tap_times = []
-        kill_app()
-        time.sleep(0.5)  # wait for mutex to release
-        launch_app()
-    elif len(tap_times) == 2:
-        # Double-tap: launch if not running
+    if now - last_tap_time < DOUBLE_TAP_WINDOW:
+        last_tap_time = 0
         if not is_app_running():
-            tap_times = []
             launch_app()
+    else:
+        last_tap_time = now
+
+
+def on_force_restart():
+    """Shift+Right Ctrl — force-kill and relaunch the app."""
+    kill_app()
+    time.sleep(0.5)  # wait for mutex to release
+    launch_app()
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
@@ -114,7 +112,8 @@ def main():
     if ctypes.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
         return
 
-    keyboard.on_release_key(DOUBLE_TAP_KEY, on_tap, suppress=False)
+    keyboard.on_release_key(DOUBLE_TAP_KEY, on_double_tap, suppress=False)
+    keyboard.add_hotkey(FORCE_RESTART_HOTKEY, on_force_restart, suppress=False)
     keyboard.wait()  # blocks forever
 
 
